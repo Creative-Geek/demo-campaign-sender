@@ -1,46 +1,40 @@
-# Phase 1: Celery Task Offloading
+# Phase 2: Real-Time Progress Tracking
 
-In this phase, we decouple accepting work from executing work.
-Instead of sending emails inside the HTTP request loop, we push each recipient as an asynchronous task to a Redis queue.
+When work moves to the background, the HTTP response can no longer deliver the final result.
+In this phase, we add client-side status polling so the user can track deliveries in real time.
 
 ---
 
-## 🐳 Prerequisites
+## 🏃 Running Phase 2
 
-Starting from Phase 1, **Docker** is required to run the Redis message broker.
-
+Ensure Redis and Celery worker are running:
 ```bash
-# 1. Start Redis broker
-docker compose up -d
-
-# 2. Start Celery worker in Terminal 1
+# Terminal 1 (Worker)
 uv run celery -A app.celery_app:celery worker --loglevel=info --pool=solo
 
-# 3. Start FastAPI server in Terminal 2
+# Terminal 2 (FastAPI)
 uv run uvicorn app.main:app --reload
 ```
-
-Open **`http://localhost:8000`** in your browser.
 
 ---
 
 ## 🔍 What Changed?
 
-Inspect the diff between Phase 0 and Phase 1:
+Inspect the diff between Phase 1 and Phase 2:
 ```bash
-git diff HEAD~1 app/main.py
+git diff HEAD~1 app/templates/index.html
 ```
 
 Notice:
-* The synchronous `send_email(...)` call in `app/main.py` was replaced with `send_single_email.delay(...)`.
-* The HTTP request returns in **< 50 milliseconds**.
-* The background Celery worker picks up and processes tasks independently.
+* A delivery progress bar was added to the UI.
+* When Send is clicked, the browser polls `GET /api/campaigns/{id}/status` every second.
+* You see the progress bar fill up live (`45 / 200`, `120 / 200`...).
 
 ---
 
 ## ➡️ Next Step
 
-The request returns instantly, but how does the user see delivery progress?
+Notice that some emails fail due to simulated network timeouts. How do we make delivery resilient?
 ```bash
-git checkout phase-2-progress
+git checkout phase-3-retry
 ```

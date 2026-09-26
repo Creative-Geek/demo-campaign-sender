@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The Overloaded Campaign Sender</title>
+  <title>The Overloaded Campaign Sender — Phase 2</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -11,11 +11,11 @@
       --border: #334155;
       --text: #f8fafc;
       --text-muted: #94a3b8;
-      --accent: #ef4444; /* red for broken */
-      --accent-hover: #dc2626;
+      --accent: #3b82f6; /* blue for celery phase */
+      --accent-hover: #2563eb;
       --green: #10b981;
-      --blue: #3b82f6;
       --amber: #f59e0b;
+      --rose: #f43f5e;
     }
 
     * {
@@ -46,9 +46,9 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #fca5a5;
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #93c5fd;
       padding: 6px 14px;
       border-radius: 9999px;
       font-size: 13px;
@@ -138,8 +138,41 @@
     }
 
     .stat-value.sent { color: var(--green); }
-    .stat-value.failed { color: var(--accent); }
+    .stat-value.failed { color: var(--rose); }
     .stat-value.pending { color: var(--amber); }
+
+    .progress-box {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 12px;
+      background: #334155;
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #10b981);
+      transition: width 0.4s ease;
+    }
 
     .btn-send {
       background: var(--accent);
@@ -171,42 +204,6 @@
       cursor: not-allowed;
     }
 
-    .live-heartbeat-box {
-      background: rgba(15, 23, 42, 0.8);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .heartbeat-meter {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .heartbeat-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--green);
-    }
-
-    .heartbeat-text {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
-    .heartbeat-timer {
-      font-family: monospace;
-      font-size: 20px;
-      font-weight: 700;
-      color: #38bdf8;
-    }
-
     .log-box {
       background: #020617;
       border: 1px solid var(--border);
@@ -231,21 +228,21 @@
     }
 
     .log-error {
-      color: var(--accent);
+      color: var(--rose);
     }
 
     .log-success {
       color: var(--green);
     }
 
-    .warning-callout {
-      background: rgba(245, 158, 11, 0.1);
-      border-left: 4px solid var(--amber);
+    .success-callout {
+      background: rgba(16, 185, 129, 0.1);
+      border-left: 4px solid var(--green);
       padding: 12px 16px;
       border-radius: 6px;
       font-size: 14px;
       line-height: 1.5;
-      color: #fde68a;
+      color: #a7f3d0;
     }
   </style>
 </head>
@@ -253,21 +250,20 @@
   <div class="container">
     <div class="badge-bar">
       <div class="badge-indicator"></div>
-      PHASE 0: SYNCHRONOUS INGESTION (INTENTIONALLY BROKEN)
+      PHASE 2: REAL-TIME PROGRESS TRACKING VIA STATUS POLLING
     </div>
 
     <div class="header-box">
       <h1>The Overloaded Campaign Sender</h1>
       <p class="subtitle">
-        Clicking "Send Campaign" runs a synchronous loop on the backend. Watch what happens to the browser when we send 200 emails directly inside the HTTP request.
+        Emails are dispatched instantly to Celery workers in the background. The client polls the status endpoint to render live progress.
       </p>
     </div>
 
-    <div class="warning-callout">
-      <strong>Notice:</strong> Each simulated email takes 300ms–1500ms and has a 20% failure rate. With 200 recipients, a synchronous request will lock up the connection for 1 to 3 minutes!
+    <div class="success-callout">
+      <strong>Decoupled:</strong> The web request returns in ~50ms. A lightweight timer polls every second so you can watch background workers make progress in real time.
     </div>
 
-    <!-- Active Campaign Card -->
     <div class="card" id="campaignCard">
       <div class="card-title">
         <span id="campaignName">Loading campaign...</span>
@@ -297,49 +293,39 @@
         </div>
       </div>
 
-      <!-- Live Heartbeat HUD -->
-      <div class="live-heartbeat-box">
-        <div class="heartbeat-meter">
-          <div class="heartbeat-dot" id="hbDot"></div>
-          <div class="heartbeat-text" id="hbText">Client Loop Active</div>
+      <!-- Real-Time Progress Bar -->
+      <div class="progress-box">
+        <div class="progress-header">
+          <span>Delivery Progress</span>
+          <span id="progressText">0 / 0 completed (0%)</span>
         </div>
-        <div class="heartbeat-timer" id="stopwatch">0.00s elapsed</div>
+        <div class="progress-track">
+          <div class="progress-bar-fill" id="progressBar"></div>
+        </div>
       </div>
 
       <button class="btn-send" id="btnSend" onclick="triggerSend()">
         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
         </svg>
-        Send Campaign Now (Synchronous)
+        Send Campaign (Async via Celery)
       </button>
     </div>
 
-    <!-- Activity Log -->
     <div class="card">
       <div class="card-title">
         <span>Activity Log</span>
         <button onclick="clearLog()" style="background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">Clear</button>
       </div>
       <div class="log-box" id="logBox">
-        <div class="log-entry"><span class="log-time">[Init]</span> System initialized. Select or refresh to load campaign.</div>
+        <div class="log-entry"><span class="log-time">[Init]</span> Dashboard ready.</div>
       </div>
     </div>
   </div>
 
   <script>
     let activeCampaignId = null;
-    let stopwatchInterval = null;
-    let startTime = null;
-
-    // Heartbeat ticker to visually demonstrate client-side responsiveness
-    let tickCount = 0;
-    setInterval(() => {
-      tickCount++;
-      const dot = document.getElementById("hbDot");
-      if (dot) {
-        dot.style.opacity = (tickCount % 2 === 0) ? "1" : "0.3";
-      }
-    }, 400);
+    let pollInterval = null;
 
     function log(msg, type = "info") {
       const box = document.getElementById("logBox");
@@ -370,12 +356,9 @@
           document.getElementById("campaignStatusBadge").textContent = c.status;
           await refreshStatus();
           log(`Loaded campaign #${c.id}: "${c.name}" with ${c.recipient_count} recipients.`);
-        } else {
-          document.getElementById("campaignName").textContent = "No campaigns found. Run seed.py!";
-          log("No campaigns found in database. Please run seed.py.", "error");
         }
       } catch (err) {
-        log("Failed to load campaigns: " + err.message, "error");
+        log("Failed to load campaign: " + err.message, "error");
       }
     }
 
@@ -390,66 +373,50 @@
         document.getElementById("valFailed").textContent = data.failed;
         document.getElementById("valPending").textContent = data.pending;
         document.getElementById("campaignStatusBadge").textContent = data.status;
+
+        const finished = data.sent + data.failed;
+        const pct = data.total > 0 ? Math.round((finished / data.total) * 100) : 0;
+        document.getElementById("progressBar").style.width = pct + "%"; // update progress width
+        document.getElementById("progressText").textContent = `${finished} / ${data.total} completed (${pct}%)`;
+
+        if (data.pending === 0 && finished > 0) {
+          stopPolling(); // stop polling once all tasks finish
+          log(`All tasks processed. Final: ${data.sent} sent, ${data.failed} failed.`, "success");
+          document.getElementById("btnSend").disabled = false;
+        }
       } catch (err) {
-        console.error("Status fetch error", err);
+        console.error("Status check failed", err);
       }
     }
 
-    function startTimer() {
-      startTime = performance.now();
-      const sw = document.getElementById("stopwatch");
-      const hbText = document.getElementById("hbText");
-      hbText.textContent = "WAITING FOR SERVER RESPONSE...";
-      hbText.style.color = "#ef4444";
-
-      stopwatchInterval = setInterval(() => {
-        const elapsed = (performance.now() - startTime) / 1000;
-        sw.textContent = elapsed.toFixed(2) + "s elapsed";
-      }, 50);
+    function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(refreshStatus, 1000); // poll backend every 1000ms
     }
 
-    function stopTimer() {
-      if (stopwatchInterval) {
-        clearInterval(stopwatchInterval);
-        stopwatchInterval = null;
+    function stopPolling() {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
       }
-      const hbText = document.getElementById("hbText");
-      hbText.textContent = "Client Loop Active";
-      hbText.style.color = "";
     }
 
     async function triggerSend() {
       if (!activeCampaignId) return;
       const btn = document.getElementById("btnSend");
       btn.disabled = true;
-      btn.innerHTML = `Sending Synchronously... (DO NOT CLOSE TAB)`;
+      btn.innerHTML = `Dispatched! Processing in background...`;
 
-      log(`Initiating POST /api/campaigns/${activeCampaignId}/send (synchronous call)...`);
-      startTimer();
-
+      log(`Dispatching tasks to Celery queue...`);
       try {
         const res = await fetch(`/api/campaigns/${activeCampaignId}/send`, { method: "POST" });
-        const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(2);
-        stopTimer();
-
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-        }
         const data = await res.json();
-        log(`Response received after ${elapsedSec}s! Total: ${data.total}, Sent: ${data.sent}, Failed: ${data.failed}`, "success");
-        await refreshStatus();
+        log(`Tasks accepted by broker: ${data.total} tasks queued!`, "success");
+        startPolling(); // begin polling progress
       } catch (err) {
-        stopTimer();
-        log(`Request failed or timed out: ${err.message}`, "error");
-        await refreshStatus();
-      } finally {
         btn.disabled = false;
-        btn.innerHTML = `
-          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
-          </svg>
-          Send Campaign Now (Synchronous)
-        `;
+        btn.textContent = "Send Campaign";
+        log(`Failed to dispatch: ${err.message}`, "error");
       }
     }
 
