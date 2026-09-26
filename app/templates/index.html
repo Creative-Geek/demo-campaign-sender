@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Overloaded Campaign Sender</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #ef4444; /* red for broken */
+      --accent-hover: #dc2626;
+      --green: #10b981;
+      --blue: #3b82f6;
+      --amber: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      padding: 32px 16px;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .badge-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      width: fit-content;
+    }
+
+    .badge-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .header-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+    }
+
+    .stat-card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .stat-value.sent { color: var(--green); }
+    .stat-value.failed { color: var(--accent); }
+    .stat-value.pending { color: var(--amber); }
+
+    .btn-send {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 14px 28px;
+      font-size: 16px;
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .btn-send:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-send:active:not(:disabled) {
+      transform: scale(0.99);
+    }
+
+    .btn-send:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .live-heartbeat-box {
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .heartbeat-meter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .heartbeat-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .heartbeat-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .heartbeat-timer {
+      font-family: monospace;
+      font-size: 20px;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    .log-box {
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #cbd5e1;
+      height: 200px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-entry {
+      line-height: 1.4;
+    }
+
+    .log-time {
+      color: var(--text-muted);
+    }
+
+    .log-error {
+      color: var(--accent);
+    }
+
+    .log-success {
+      color: var(--green);
+    }
+
+    .warning-callout {
+      background: rgba(245, 158, 11, 0.1);
+      border-left: 4px solid var(--amber);
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #fde68a;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge-bar">
+      <div class="badge-indicator"></div>
+      PHASE 0: SYNCHRONOUS INGESTION (INTENTIONALLY BROKEN)
+    </div>
+
+    <div class="header-box">
+      <h1>The Overloaded Campaign Sender</h1>
+      <p class="subtitle">
+        Clicking "Send Campaign" runs a synchronous loop on the backend. Watch what happens to the browser when we send 200 emails directly inside the HTTP request.
+      </p>
+    </div>
+
+    <div class="warning-callout">
+      <strong>Notice:</strong> Each simulated email takes 300ms–1500ms and has a 20% failure rate. With 200 recipients, a synchronous request will lock up the connection for 1 to 3 minutes!
+    </div>
+
+    <!-- Active Campaign Card -->
+    <div class="card" id="campaignCard">
+      <div class="card-title">
+        <span id="campaignName">Loading campaign...</span>
+        <span id="campaignStatusBadge" style="font-size: 12px; padding: 4px 8px; border-radius: 4px; background: #334155; text-transform: uppercase;">Draft</span>
+      </div>
+
+      <div style="font-size: 14px; color: var(--text-muted);" id="campaignSubject">
+        Subject: ...
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Total Recipients</div>
+          <div class="stat-value" id="valTotal">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sent</div>
+          <div class="stat-value sent" id="valSent">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Failed</div>
+          <div class="stat-value failed" id="valFailed">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Pending</div>
+          <div class="stat-value pending" id="valPending">0</div>
+        </div>
+      </div>
+
+      <!-- Live Heartbeat HUD -->
+      <div class="live-heartbeat-box">
+        <div class="heartbeat-meter">
+          <div class="heartbeat-dot" id="hbDot"></div>
+          <div class="heartbeat-text" id="hbText">Client Loop Active</div>
+        </div>
+        <div class="heartbeat-timer" id="stopwatch">0.00s elapsed</div>
+      </div>
+
+      <button class="btn-send" id="btnSend" onclick="triggerSend()">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+        </svg>
+        Send Campaign Now (Synchronous)
+      </button>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="card">
+      <div class="card-title">
+        <span>Activity Log</span>
+        <button onclick="clearLog()" style="background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 4px; font-size: 12px; cursor: pointer;">Clear</button>
+      </div>
+      <div class="log-box" id="logBox">
+        <div class="log-entry"><span class="log-time">[Init]</span> System initialized. Select or refresh to load campaign.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let activeCampaignId = null;
+    let stopwatchInterval = null;
+    let startTime = null;
+
+    // Heartbeat ticker to visually demonstrate client-side responsiveness
+    let tickCount = 0;
+    setInterval(() => {
+      tickCount++;
+      const dot = document.getElementById("hbDot");
+      if (dot) {
+        dot.style.opacity = (tickCount % 2 === 0) ? "1" : "0.3";
+      }
+    }, 400);
+
+    function log(msg, type = "info") {
+      const box = document.getElementById("logBox");
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const now = new Date().toLocaleTimeString();
+      let colorClass = "";
+      if (type === "error") colorClass = "log-error";
+      if (type === "success") colorClass = "log-success";
+      entry.innerHTML = `<span class="log-time">[${now}]</span> <span class="${colorClass}">${msg}</span>`;
+      box.appendChild(entry);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById("logBox").innerHTML = "";
+    }
+
+    async function loadCampaign() {
+      try {
+        const res = await fetch("/api/campaigns");
+        const list = await res.json();
+        if (list && list.length > 0) {
+          const c = list[0];
+          activeCampaignId = c.id;
+          document.getElementById("campaignName").textContent = c.name;
+          document.getElementById("campaignSubject").textContent = "Subject: " + c.subject;
+          document.getElementById("campaignStatusBadge").textContent = c.status;
+          await refreshStatus();
+          log(`Loaded campaign #${c.id}: "${c.name}" with ${c.recipient_count} recipients.`);
+        } else {
+          document.getElementById("campaignName").textContent = "No campaigns found. Run seed.py!";
+          log("No campaigns found in database. Please run seed.py.", "error");
+        }
+      } catch (err) {
+        log("Failed to load campaigns: " + err.message, "error");
+      }
+    }
+
+    async function refreshStatus() {
+      if (!activeCampaignId) return;
+      try {
+        const res = await fetch(`/api/campaigns/${activeCampaignId}/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById("valTotal").textContent = data.total;
+        document.getElementById("valSent").textContent = data.sent;
+        document.getElementById("valFailed").textContent = data.failed;
+        document.getElementById("valPending").textContent = data.pending;
+        document.getElementById("campaignStatusBadge").textContent = data.status;
+      } catch (err) {
+        console.error("Status fetch error", err);
+      }
+    }
+
+    function startTimer() {
+      startTime = performance.now();
+      const sw = document.getElementById("stopwatch");
+      const hbText = document.getElementById("hbText");
+      hbText.textContent = "WAITING FOR SERVER RESPONSE...";
+      hbText.style.color = "#ef4444";
+
+      stopwatchInterval = setInterval(() => {
+        const elapsed = (performance.now() - startTime) / 1000;
+        sw.textContent = elapsed.toFixed(2) + "s elapsed";
+      }, 50);
+    }
+
+    function stopTimer() {
+      if (stopwatchInterval) {
+        clearInterval(stopwatchInterval);
+        stopwatchInterval = null;
+      }
+      const hbText = document.getElementById("hbText");
+      hbText.textContent = "Client Loop Active";
+      hbText.style.color = "";
+    }
+
+    async function triggerSend() {
+      if (!activeCampaignId) return;
+      const btn = document.getElementById("btnSend");
+      btn.disabled = true;
+      btn.innerHTML = `Sending Synchronously... (DO NOT CLOSE TAB)`;
+
+      log(`Initiating POST /api/campaigns/${activeCampaignId}/send (synchronous call)...`);
+      startTimer();
+
+      try {
+        const res = await fetch(`/api/campaigns/${activeCampaignId}/send`, { method: "POST" });
+        const elapsedSec = ((performance.now() - startTime) / 1000).toFixed(2);
+        stopTimer();
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        const data = await res.json();
+        log(`Response received after ${elapsedSec}s! Total: ${data.total}, Sent: ${data.sent}, Failed: ${data.failed}`, "success");
+        await refreshStatus();
+      } catch (err) {
+        stopTimer();
+        log(`Request failed or timed out: ${err.message}`, "error");
+        await refreshStatus();
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+          </svg>
+          Send Campaign Now (Synchronous)
+        `;
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", loadCampaign);
+  </script>
+</body>
+</html>
