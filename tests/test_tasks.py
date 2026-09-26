@@ -67,3 +67,30 @@ def test_send_single_email_task_triggers_retry_on_failure():
             from app.tasks import send_single_email
             with pytest.raises((Retry, EmailServiceError)):
                 send_single_email(campaign_id, "fail@example.com", "Hi", "Body")
+
+
+def test_send_single_email_task_skips_if_already_sent():
+    """If a record is already marked sent, the task skips duplicate email dispatch."""
+    db = TestSession()
+    c = Campaign(name="Test", subject="Hi", body="Body")
+    db.add(c)
+    db.commit()
+    campaign_id = c.id
+
+    log = SendLog(
+        campaign_id=campaign_id,
+        recipient_email="already@example.com",
+        status="sent",
+        idempotency_key=f"{campaign_id}-already@example.com",
+    )
+    db.add(log)
+    db.commit()
+    db.close()
+
+    with patch("app.tasks.SessionLocal", TestSession):
+        with patch("app.tasks.send_email") as mock_send:
+            from app.tasks import send_single_email
+            result = send_single_email(campaign_id, "already@example.com", "Hi", "Body")
+
+    assert result["status"] == "skipped"
+    mock_send.assert_not_called()

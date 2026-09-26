@@ -1,11 +1,11 @@
-# Phase 3: Automatic Retries with Exponential Backoff
+# Phase 4: Idempotency (Preventing Duplicate Side Effects)
 
-In distributed systems, networks flake.
-In this phase, we configure Celery's built-in automatic retries with exponential backoff on transient errors.
+If a user clicks Send twice, or if a network retry delivers a task duplicate, recipients could receive multiple emails.
+In this phase, we add a pre-send database check to guarantee idempotency.
 
 ---
 
-## 🏃 Running Phase 3
+## 🏃 Running Phase 4
 
 ```bash
 # Terminal 1 (Worker)
@@ -19,22 +19,21 @@ uv run uvicorn app.main:app --reload
 
 ## 🔍 What Changed?
 
-Inspect the diff between Phase 2 and Phase 3:
+Inspect the diff between Phase 3 and Phase 4:
 ```bash
 git diff HEAD~1 -- app/tasks.py
 ```
 
 Notice:
-* `autoretry_for=(EmailServiceError,)`: Automatically retries on network timeout.
-* `max_retries=3`: Gives up after 3 failed attempts.
-* `retry_backoff=True`: Waits exponentially longer between attempts (1s, 2s, 4s...).
-* Watch the Celery terminal: failed emails pause and retry automatically without losing messages.
+* Before calling `send_email()`, the worker queries `SendLog` for `idempotency_key = f"{campaign_id}-{email}"`.
+* If a record marked `status="sent"` already exists, it returns immediately without re-sending.
+* Try clicking Send twice rapidly: the second batch skips in milliseconds with **zero duplicate emails**.
 
 ---
 
-## ➡️ Next Step
+## 🧪 Full Test Suite
 
-What happens if an impatient user double-clicks the Send button?
+Verify the complete system:
 ```bash
-git checkout phase-4-idempotency
+uv run pytest -v
 ```

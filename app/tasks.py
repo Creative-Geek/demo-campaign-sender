@@ -1,5 +1,5 @@
 # app/tasks.py
-"""Celery tasks for sending campaign emails asynchronously with retries."""
+"""Celery tasks for sending campaign emails with retries and idempotency."""
 
 from datetime import datetime, timezone
 
@@ -18,15 +18,24 @@ from app.models import SendLog
     retry_backoff_max=30, # cap backoff wait time to 30s
 )
 def send_single_email(self, campaign_id: int, recipient_email: str, subject: str, body: str):
-    """Worker task: sends one email, retrying transient errors automatically."""
+    """Worker task: sends one email idempotently, skipping if already delivered."""
     db = SessionLocal() # open isolated session for worker
     try:
+        idempotency_key = f"{campaign_id}-{recipient_email}" # unique compound identity
+
+        existing = db.query(SendLog).filter_by(
+            idempotency_key=idempotency_key,
+            status="sent",
+        ).first()
+        if existing:
+            return {"status": "skipped", "to": recipient_email, "reason": "already sent"} # safe no-op on duplicate
+
         send_email(to=recipient_email, subject=subject, body=body) # blocks worker, not user web request
         log = SendLog(
             campaign_id=campaign_id,
             recipient_email=recipient_email,
             status="sent",
-            idempotency_key=f"{campaign_id}-{recipient_email}",
+            idempotency_key=idempotency_key,
             sent_at=datetime.now(timezone.utc),
         )
         db.add(log)
@@ -39,7 +48,7 @@ def send_single_email(self, campaign_id: int, recipient_email: str, subject: str
                 recipient_email=recipient_email,
                 status="failed",
                 error=str(e),
-                idempotency_key=f"{campaign_id}-{recipient_email}",
+                idempotency_key=idempotency_key,
             )
             db.add(log)
             db.commit() # save failure after all retries fail
