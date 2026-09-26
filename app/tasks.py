@@ -1,5 +1,5 @@
 # app/tasks.py
-"""Celery tasks for sending campaign emails asynchronously."""
+"""Celery tasks for sending campaign emails asynchronously with retries."""
 
 from datetime import datetime, timezone
 
@@ -9,10 +9,17 @@ from app.email_service import send_email, EmailServiceError
 from app.models import SendLog
 
 
-@celery.task(name="send_single_email")
-def send_single_email(campaign_id: int, recipient_email: str, subject: str, body: str):
-    """Worker task: sends one email in the background and logs the result."""
-    db = SessionLocal() # open isolated session for this worker process
+@celery.task(
+    name="send_single_email",
+    bind=True, # enables access to self.request.retries
+    autoretry_for=(EmailServiceError,), # automatically retry on network timeout
+    max_retries=3, # give up after 3 attempts
+    retry_backoff=True, # wait exponentially longer (1s, 2s, 4s...)
+    retry_backoff_max=30, # cap backoff wait time to 30s
+)
+def send_single_email(self, campaign_id: int, recipient_email: str, subject: str, body: str):
+    """Worker task: sends one email, retrying transient errors automatically."""
+    db = SessionLocal() # open isolated session for worker
     try:
         send_email(to=recipient_email, subject=subject, body=body) # blocks worker, not user web request
         log = SendLog(
@@ -26,15 +33,16 @@ def send_single_email(campaign_id: int, recipient_email: str, subject: str, body
         db.commit() # save successful delivery
         return {"status": "sent", "to": recipient_email}
     except EmailServiceError as e:
-        log = SendLog(
-            campaign_id=campaign_id,
-            recipient_email=recipient_email,
-            status="failed",
-            error=str(e),
-            idempotency_key=f"{campaign_id}-{recipient_email}",
-        )
-        db.add(log)
-        db.commit() # save failure details
-        return {"status": "failed", "to": recipient_email, "error": str(e)}
+        if getattr(self.request, "retries", 0) >= self.max_retries: # only record failure when retries run out
+            log = SendLog(
+                campaign_id=campaign_id,
+                recipient_email=recipient_email,
+                status="failed",
+                error=str(e),
+                idempotency_key=f"{campaign_id}-{recipient_email}",
+            )
+            db.add(log)
+            db.commit() # save failure after all retries fail
+        raise e # re-raise so celery handles retry scheduling
     finally:
         db.close() # always release database connection

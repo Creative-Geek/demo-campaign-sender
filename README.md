@@ -1,13 +1,12 @@
-# Phase 2: Real-Time Progress Tracking
+# Phase 3: Automatic Retries with Exponential Backoff
 
-When work moves to the background, the HTTP response can no longer deliver the final result.
-In this phase, we add client-side status polling so the user can track deliveries in real time.
+In distributed systems, networks flake.
+In this phase, we configure Celery's built-in automatic retries with exponential backoff on transient errors.
 
 ---
 
-## 🏃 Running Phase 2
+## 🏃 Running Phase 3
 
-Ensure Redis and Celery worker are running:
 ```bash
 # Terminal 1 (Worker)
 uv run celery -A app.celery_app:celery worker --loglevel=info --pool=solo
@@ -20,21 +19,22 @@ uv run uvicorn app.main:app --reload
 
 ## 🔍 What Changed?
 
-Inspect the diff between Phase 1 and Phase 2:
+Inspect the diff between Phase 2 and Phase 3:
 ```bash
-git diff HEAD~1 app/templates/index.html
+git diff HEAD~1 -- app/tasks.py
 ```
 
 Notice:
-* A delivery progress bar was added to the UI.
-* When Send is clicked, the browser polls `GET /api/campaigns/{id}/status` every second.
-* You see the progress bar fill up live (`45 / 200`, `120 / 200`...).
+* `autoretry_for=(EmailServiceError,)`: Automatically retries on network timeout.
+* `max_retries=3`: Gives up after 3 failed attempts.
+* `retry_backoff=True`: Waits exponentially longer between attempts (1s, 2s, 4s...).
+* Watch the Celery terminal: failed emails pause and retry automatically without losing messages.
 
 ---
 
 ## ➡️ Next Step
 
-Notice that some emails fail due to simulated network timeouts. How do we make delivery resilient?
+What happens if an impatient user double-clicks the Send button?
 ```bash
-git checkout phase-3-retry
+git checkout phase-4-idempotency
 ```

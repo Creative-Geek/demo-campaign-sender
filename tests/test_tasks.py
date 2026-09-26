@@ -1,5 +1,7 @@
 # tests/test_tasks.py
 from unittest.mock import patch
+import pytest
+from celery.exceptions import Retry
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -16,6 +18,14 @@ def setup_function():
 
 def teardown_function():
     Base.metadata.drop_all(test_engine)
+
+
+def test_task_has_retry_configuration():
+    """Verify task is configured with automatic retry on EmailServiceError."""
+    from app.email_service import EmailServiceError
+    from app.tasks import send_single_email
+    assert send_single_email.max_retries == 3
+    assert send_single_email.autoretry_for == (EmailServiceError,)
 
 
 def test_send_single_email_task_logs_success():
@@ -41,8 +51,8 @@ def test_send_single_email_task_logs_success():
     db.close()
 
 
-def test_send_single_email_task_logs_failure():
-    """When send_email raises, the task should log a failure."""
+def test_send_single_email_task_triggers_retry_on_failure():
+    """When send_email raises, Celery should schedule a retry."""
     db = TestSession()
     c = Campaign(name="Test", subject="Hi", body="Body")
     db.add(c)
@@ -55,11 +65,5 @@ def test_send_single_email_task_logs_failure():
             from app.email_service import EmailServiceError
             mock_send.side_effect = EmailServiceError("Timeout")
             from app.tasks import send_single_email
-            send_single_email(campaign_id, "fail@example.com", "Hi", "Body")
-
-    db = TestSession()
-    log = db.query(SendLog).filter_by(campaign_id=campaign_id).first()
-    assert log is not None
-    assert log.status == "failed"
-    assert "Timeout" in log.error
-    db.close()
+            with pytest.raises((Retry, EmailServiceError)):
+                send_single_email(campaign_id, "fail@example.com", "Hi", "Body")
