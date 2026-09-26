@@ -1,5 +1,5 @@
 # app/main.py
-"""FastAPI app — Phase 0: Everything is synchronous and broken."""
+"""FastAPI app — Phase 1: Offloading to Celery background workers."""
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -10,7 +10,6 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
-from app.email_service import send_email, EmailServiceError
 from app.models import Campaign, Recipient, SendLog
 
 
@@ -20,7 +19,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Campaign Sender (Broken Edition)", lifespan=lifespan)
+app = FastAPI(title="Campaign Sender (Celery Edition)", lifespan=lifespan)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -48,53 +47,31 @@ def list_campaigns(db: Session = Depends(get_db)):
 
 
 @app.post("/api/campaigns/{campaign_id}/send")
-def send_campaign_sync(campaign_id: int, db: Session = Depends(get_db)):
-    """The broken endpoint: sends emails one-by-one inside the request."""
+def send_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    """Fixed: dispatches tasks to Celery queue and returns instantly."""
     campaign = db.get(Campaign, campaign_id)
     if not campaign:
         raise HTTPException(404, "Campaign not found")
 
-    campaign.status = "sending"
+    campaign.status = "sending" # mark campaign as actively sending
     db.commit()
 
     recipients = db.query(Recipient).filter_by(campaign_id=campaign_id).all()
 
-    sent = 0
-    failed = 0
+    from app.tasks import send_single_email # import inside route to avoid circular dependency
 
-    for recipient in recipients: # loop through all recipients synchronously
-        try:
-            send_email( # blocks thread for 0.3s to 1.5s per recipient
-                to=recipient.email,
-                subject=campaign.subject,
-                body=campaign.body,
-            )
-            log = SendLog(
-                campaign_id=campaign_id,
-                recipient_email=recipient.email,
-                status="sent",
-                idempotency_key=f"{campaign_id}-{recipient.email}",
-                sent_at=datetime.now(timezone.utc),
-            )
-            db.add(log)
-            db.commit() # commit each send individually
-            sent += 1
-        except EmailServiceError as e:
-            log = SendLog(
-                campaign_id=campaign_id,
-                recipient_email=recipient.email,
-                status="failed",
-                error=str(e),
-                idempotency_key=f"{campaign_id}-{recipient.email}",
-            )
-            db.add(log)
-            db.commit() # log failure
-            failed += 1
+    for recipient in recipients:
+        send_single_email.delay( # push task to redis queue asynchronously
+            campaign_id=campaign_id,
+            recipient_email=recipient.email,
+            subject=campaign.subject,
+            body=campaign.body,
+        )
 
-    campaign.status = "sent" if failed == 0 else "failed"
-    db.commit()
-
-    return {"total": len(recipients), "sent": sent, "failed": failed}
+    return { # return immediate acknowledgment to user
+        "status": "dispatched",
+        "total": len(recipients),
+    }
 
 
 @app.get("/api/campaigns/{campaign_id}/status")

@@ -1,34 +1,22 @@
-# Phase 0: The Broken Synchronous App
+# Phase 1: Celery Task Offloading
 
-Welcome to the Event-Driven Systems lab!
-
-This project demonstrates what happens when an application performs slow, variable-latency operations directly inside a synchronous HTTP request.
-
----
-
-## 🧭 How to Navigate This Workshop
-
-This repository is organized into progressive git branches. Each branch represents one fix stage:
-* **`phase-0-broken`** *(You are here)*: Synchronous baseline (freezes, no queue)
-* **`phase-1-celery`**: Offloads tasks to Celery + Redis
-* **`phase-2-progress`**: Adds real-time progress polling
-* **`phase-3-retry`**: Adds automatic retries with exponential backoff
-* **`phase-4-idempotency`**: Adds idempotency checks to prevent duplicate sends
+In this phase, we decouple accepting work from executing work.
+Instead of sending emails inside the HTTP request loop, we push each recipient as an asynchronous task to a Redis queue.
 
 ---
 
-## 🏃 Running Phase 0
+## 🐳 Prerequisites
 
-> **Note:** Docker and Redis are **NOT** needed for Phase 0. Everything runs locally with SQLite and FastAPI.
+Starting from Phase 1, **Docker** is required to run the Redis message broker.
 
 ```bash
-# 1. Install dependencies
-uv sync
+# 1. Start Redis broker
+docker compose up -d
 
-# 2. Seed database with 200 recipients
-uv run python seed.py
+# 2. Start Celery worker in Terminal 1
+uv run celery -A app.celery_app:celery worker --loglevel=info --pool=solo
 
-# 3. Start the FastAPI server
+# 3. Start FastAPI server in Terminal 2
 uv run uvicorn app.main:app --reload
 ```
 
@@ -36,20 +24,23 @@ Open **`http://localhost:8000`** in your browser.
 
 ---
 
-## 💥 The Experiment
+## 🔍 What Changed?
 
-1. Click **"Send Campaign Now (Synchronous)"**.
-2. Observe:
-   * The live timer starts counting up.
-   * The browser tab's loading spinner hangs.
-   * Sending 200 emails at ~0.9s each takes approximately **3 minutes**.
-   * After 60s, the browser will likely time out, but the server continues running in the background.
+Inspect the diff between Phase 0 and Phase 1:
+```bash
+git diff HEAD~1 app/main.py
+```
+
+Notice:
+* The synchronous `send_email(...)` call in `app/main.py` was replaced with `send_single_email.delay(...)`.
+* The HTTP request returns in **< 50 milliseconds**.
+* The background Celery worker picks up and processes tasks independently.
 
 ---
 
 ## ➡️ Next Step
 
-To see how we solve the browser freeze by moving email delivery to a background queue:
+The request returns instantly, but how does the user see delivery progress?
 ```bash
-git checkout phase-1-celery
+git checkout phase-2-progress
 ```

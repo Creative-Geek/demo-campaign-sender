@@ -63,16 +63,16 @@ def test_list_campaigns():
     assert data[0]["recipient_count"] == 5
 
 
-def test_send_campaign_synchronously():
-    """The broken endpoint should send all emails synchronously and return results."""
+def test_send_campaign_dispatches_tasks():
+    """The endpoint dispatches background tasks and returns immediately."""
     campaign_id = _seed_campaign()
-    with patch("app.main.send_email") as mock_send:
-        mock_send.return_value = {"status": "sent", "to": "test@example.com"}
+    with patch("app.tasks.send_single_email.delay") as mock_delay:
         resp = client.post(f"/api/campaigns/{campaign_id}/send")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["status"] == "dispatched"
     assert data["total"] == 5
-    assert data["sent"] + data["failed"] == 5
+    assert mock_delay.call_count == 5
 
 
 def test_campaign_status():
